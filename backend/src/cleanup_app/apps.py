@@ -58,6 +58,16 @@ class CleanupAppConfig(AppConfig):
         """
         from cleanup_app import conf
 
+        # Connected before the AUTO_CONNECT early return below, and unconditionally on it:
+        # TRACK_AUTO_DELETIONS logs whatever cleanup_post_delete fires, regardless of whether
+        # THIS app wired django_cleanup's own handlers or a host did it directly after setting
+        # AUTO_CONNECT=False (docs/CONTRACT.md §5). Coupling it to AUTO_CONNECT would silently
+        # stop history tracking for exactly the hosts most likely to have their own setup.
+        if conf.get_setting("TRACK_AUTO_DELETIONS"):
+            from cleanup_app import receivers
+
+            receivers.connect()
+
         if not conf.get_setting("AUTO_CONNECT"):
             return
 
