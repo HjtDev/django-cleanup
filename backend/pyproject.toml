@@ -1,0 +1,224 @@
+[build-system]
+# setuptools-scm deliberately NOT included here (APP-DESIGN.md §3.1 declares it but never wires
+# it up — no `dynamic = ["version"]`, no [tool.setuptools_scm] table — so it would be dead
+# weight, and it would fight CLAUDE.md's "pyproject.toml/package.json/CHANGELOG.md agree" rule
+# once all three files exist). Verified against app package #1 (appkit)'s own shipped
+# pyproject.toml, which made the same call.
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+# "hjtdev-django-cleanup", not "django-cleanup" — that name is upstream's own PyPI distribution
+# (docs/CONTRACT.md §0), a real declared dependency of this package, not something this package
+# could also claim. The IMPORTABLE module stays `cleanup_app` for the same collision reason,
+# never `django_cleanup` (upstream owns that name in the same site-packages).
+name = "hjtdev-django-cleanup"
+# 0.x = no stability guarantee while the public surface (docs/CONTRACT.md) is still being
+# written into code — same policy app package #1 (appkit) used through its own 0.x line.
+version = "0.1.0"
+description = "Finds and removes orphaned media files a Django host's FileFields no longer reference, with a Jazzmin review page, full cleanup history, and auto-hooking via django-cleanup."
+# Points at THIS directory's own README.md, not the repo-root one one level up — setuptools
+# reads `readme` relative to pyproject.toml, and a monorepo's sdist build has no reliable access
+# to files outside its own project root (build isolation may operate on a copy of just this
+# directory). backend/README.md is therefore a committed, generated COPY of the root README, not
+# hand-maintained prose of its own (APP-DESIGN.md §3.1's comment on this exact file). Wired now,
+# with a stub copy, rather than deferred to Phase 8 — omitting `readme` entirely is what shipped
+# three real appkit releases with an empty, unfixable PyPI description before anyone noticed
+# (docs/CONTRACT.md's own citation of appkit's docs/CONTRACT.md §22).
+readme = "README.md"
+requires-python = ">=3.13"
+license = "MIT"
+license-files = ["LICENSE"]
+
+# Wide ranges on anything a host also depends on directly (django/drf/drf-spectacular) — see
+# APP-DESIGN.md §1.1. hjtdev-appkit and django-cleanup are BOTH declared-dependency exceptions
+# to the no-inter-app-import rule (CONTRACT.md §0's mechanical test: is it in
+# [project.dependencies]? yes for both) — neither is a sibling app package. Verified against
+# PyPI: hjtdev-appkit 2.0.1 and django-cleanup 9.0.0 both resolvable, matching CONTRACT.md's
+# "Dependencies" section verbatim.
+dependencies = [
+    "django>=5.2,<7.0",
+    "djangorestframework>=3.15,<4.0",
+    "drf-spectacular>=0.27,<1.0",
+    "hjtdev-appkit>=2.0,<3.0",
+    "django-cleanup>=9.0,<10.0",
+]
+
+# A TOML subtable, not a plain key — MUST come after every bare [project] key above
+# (dependencies included). A subtable header implicitly closes the parent table to further bare
+# keys, so placing this any earlier silently nests dependencies/optional-dependencies under
+# [project.urls] instead of [project] (APP-DESIGN.md §3.1's own warning about this exact trap).
+[project.urls]
+Homepage = "https://github.com/HjtDev/django-cleanup"
+Repository = "https://github.com/HjtDev/django-cleanup"
+Changelog = "https://github.com/HjtDev/django-cleanup/blob/main/CHANGELOG.md"
+Documentation = "https://github.com/HjtDev/django-cleanup/blob/main/docs/APP-DESIGN.md"
+
+# Extras = features a CONSUMER opts into, installed with hjtdev-django-cleanup[celery]. A host
+# without Celery uses the equivalent cleanup_orphans management command via plain cron instead
+# (docs/CONTRACT.md §8) — the app is fully functional with no worker running.
+[project.optional-dependencies]
+celery = ["celery[redis]>=5.4,<6.0", "django-celery-beat>=2.7,<3.0"]
+
+# PEP 735 groups = tooling for developing THIS package. Never installed by a consumer, never
+# published, not visible to a host at all.
+[dependency-groups]
+dev = [
+    "ruff>=0.12",
+    "mypy>=1.14",
+    "django-stubs[compatible-mypy]>=5.1",
+    "djangorestframework-stubs>=3.15",
+    "pre-commit>=4.0",
+]
+test = [
+    "pytest>=8.3",
+    "pytest-django>=4.9",
+    "pytest-cov>=6.0",
+    "pytest-xdist>=3.6",
+    # Unlike appkit (which ships no models), this app ships CleanupRun/CleanupRunFile and needs
+    # factories.py's public test-only surface (APP-DESIGN.md §7.3) — factory-boy is genuinely
+    # needed here, not carried over reflexively.
+    "factory-boy>=3.3",
+    # >=3.2.10, not just >=3.2: psycopg-binary only started shipping cp314 wheels at 3.2.10, and
+    # .python-version pins 3.14 — same floor appkit's own pyproject.toml verified live against
+    # Python 3.14 via its resolution-matrix CI job (APP-DESIGN.md §7.5: tests run on Postgres).
+    "psycopg[binary]>=3.2.10",
+]
+
+[tool.uv]
+default-groups = ["dev", "test"]     # `uv sync` gives a contributor everything
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# Belt and braces alongside MANIFEST.in: package-data is what actually lands package data in the
+# built WHEEL (MANIFEST.in only governs the sdist). Missing this would silently ship a wheel with
+# no type hints and no Phase 5 Jazzmin templates, even with MANIFEST.in and
+# include-package-data = true both present — the exact gap appkit's own pyproject.toml closes for
+# py.typed, extended here to also cover this app's templates/ and static/, which appkit has
+# neither of.
+[tool.setuptools.package-data]
+cleanup_app = [
+    "py.typed",
+    "templates/**/*",
+    "static/**/*",
+    "locale/*/LC_MESSAGES/*.po",
+    "locale/*/LC_MESSAGES/*.mo",
+]
+
+# ---------------------------------------------------------------- ruff
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+src = ["src", "../tests"]
+# backend/README.md (the readme-sync copy above) sits inside this directory — `ruff format`
+# reformats Python code fences inside Markdown files by default, and without this exclude it
+# rewrites the README's own example config blocks to satisfy a formatter meant for src/ and
+# tests/, not narrative documentation (APP-DESIGN.md §3.1's own note on this exact trap).
+extend-exclude = ["README.md"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",     # pycodestyle
+    "F",          # pyflakes
+    "I",          # isort
+    "UP",         # pyupgrade
+    "B",          # bugbear
+    "DJ",         # flake8-django
+    "S",          # bandit — security
+    "TID",        # tidy-imports (used to enforce the boundary rules below)
+    "RUF",
+]
+ignore = ["S101"]  # assert is fine in tests
+
+[tool.ruff.lint.per-file-ignores]
+"../tests/**" = ["S", "TID251"]
+"*/migrations/*" = ["E501", "RUF012"]
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "parents"
+
+# --- Host modules (APP-DESIGN.md §4): an app package can't assume a host's internals exist at a
+# stable import path. Names verified against a real host (base-scaffold/backend/): config, core,
+# tools.
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"tools".msg = "cleanup_app must never import host modules — APP-DESIGN.md §4."
+"core".msg = "cleanup_app must never import host modules — APP-DESIGN.md §4."
+"config".msg = "cleanup_app must never import host modules — APP-DESIGN.md §4."
+
+# --- Sibling app packages: currently an EMPTY SET. cleanup_app is app package #2; appkit
+# (app package #1) has no siblings to ban either, since it was #1. Add one line per app as each
+# new one is created:
+#   "<app>_app".msg = "App packages must never import each other — see APP-DESIGN.md §6."
+#
+# appkit and django_cleanup are NEVER added here — both are declared dependencies
+# ([project.dependencies] above), not sibling app packages the rule exists to keep out
+# (APP-DESIGN.md §1.1's mechanical test; CONTRACT.md §0 states this explicitly for this app).
+
+# Factories are a test-only surface (APP-DESIGN.md §7.3). This works in an app repo because the
+# test tree lives outside src/ and is cleanly exempted above (per-file-ignores) — a host project
+# can't do the same, see BASE-DESIGN.md §5.2.
+"cleanup_app.factories".msg = "factories.py is test-only — see APP-DESIGN.md §7.3."
+
+# ---------------------------------------------------------------- mypy
+[tool.mypy]
+python_version = "3.13"
+strict = true
+plugins = ["mypy_django_plugin.main", "mypy_drf_plugin.main"]
+warn_unreachable = true
+exclude = ["migrations/"]
+# NOT in APP-DESIGN.md §3.1's example. Without it, [tool.django-stubs]'s
+# django_settings_module = "tests.backend.settings" is unresolvable when mypy runs from backend/
+# (the settings module lives one level up, outside src/) and `uv run mypy src` fails — verified
+# against appkit's own pyproject.toml, which carries this same fix with the same comment.
+mypy_path = "..:src"
+
+[[tool.mypy.overrides]]
+module = "*.migrations.*"
+ignore_errors = true
+
+[tool.django-stubs]
+# tests/backend/settings.py doesn't exist until Phase 2 — mypy is not a Phase 1 verification
+# gate for exactly that reason (this app's own CLAUDE-CODE-GUIDE-APP-MEDIA-CLEANUP.md §2 lists
+# ruff, not mypy, among Phase 1's checks). The setting is wired now so Phase 2 needs no further
+# pyproject.toml changes to make `uv run mypy src` pass.
+django_settings_module = "tests.backend.settings"
+
+# ---------------------------------------------------------------- pytest (see APP-DESIGN.md §7)
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "tests.backend.settings"
+pythonpath = ["src", ".."]
+testpaths = ["../tests/backend"]
+python_files = ["test_*.py"]
+# `-p appkit.testing` opts into appkit's shared api_client/user/admin_user/auth_client/
+# admin_client/frozen_request_id/clear_cache/assert_error_envelope fixtures (appkit ships no
+# pytest11 entry point deliberately, so every consumer opts in explicitly — CLAUDE-CODE-GUIDE-
+# APP.md's note on this).
+#
+# This is the ONE place this file deliberately does NOT copy appkit's own pyproject.toml:
+# appkit's addopts carries a hard "DO NOT add -p appkit.testing" comment, because a plugin
+# loaded via `-p` in addopts imports during pytest's early consider_preparse phase, before
+# pytest-cov's tracer attaches — coverage.py then permanently misreports that module (and
+# everything it imports at module scope) as "previously imported but not measured". That bit
+# appkit because its own suite measures --cov=appkit, and -p appkit.testing imports appkit's
+# OWN code before the tracer attaches. Here coverage measures --cov=cleanup_app, and
+# appkit.testing imports nothing from cleanup_app — the early-import artefact has no
+# cleanup_app-measured module to land on, so it cannot reproduce that failure mode. Confirmed by
+# reasoning from appkit's own docs/CONTRACT.md §2.17 rationale, not by re-deriving it from
+# scratch; Phase 2's first real coverage run against actual test files re-confirms empirically.
+addopts = """
+  -ra --strict-markers --strict-config -p appkit.testing
+  --cov=cleanup_app --cov-report=term-missing --cov-fail-under=85
+"""
+markers = [
+    "slow: excluded from the default run, opt in with -m slow",
+    "integration: crosses a real DB/broker boundary rather than mocking it",
+    "requires_extra: needs the celery extra installed — deselected on the bare-install leg (-m 'not requires_extra', per this repo's CLAUDE.md commands table)",
+]
+filterwarnings = ["error::DeprecationWarning"]
+
+[tool.coverage.run]
+omit = ["*/migrations/*", "*/tests/*"]

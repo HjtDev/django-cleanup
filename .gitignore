@@ -14,8 +14,10 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
+# lib/ and lib64/ deliberately REMOVED from this boilerplate: this repo's own Python venvs
+# nest everything under .venv/ (already ignored below), so a bare, unscoped `lib/` here would
+# silently match a real, hand-written TypeScript source directory once frontend/lib/ exists
+# (Phase 6) — same trap appkit hit and fixed for the same reason, see appkit's own .gitignore.
 parts/
 sdist/
 var/
@@ -49,10 +51,15 @@ coverage.xml
 *.cover
 .hypothesis/
 .pytest_cache/
+coverage/
 
 # Translations
 *.mo
 *.pot
+# ...except this app's own shipped catalogue once one exists — a wheel consumer can't run
+# compilemessages, so the compiled .mo must be committed (APP-DESIGN.md §2's "package data must
+# be declared" note). Add the negation line here (see appkit's .gitignore for the exact form)
+# the day backend/src/cleanup_app/locale/ gets a real catalogue — not before.
 
 # Django stuff:
 *.log
@@ -81,7 +88,9 @@ profile_default/
 ipython_config.py
 
 # pyenv
-.python-version
+# NOT ignoring .python-version here — this repo commits it deliberately
+# (APP-DESIGN.md §3.3: it pins what `uv` provisions locally, separate from the
+# `requires-python` range in pyproject.toml).
 
 # pipenv
 #   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
@@ -125,3 +134,27 @@ dmypy.json
 
 # Pycharm
 .idea/
+
+# ruff
+.ruff_cache/
+
+# node
+node_modules/
+
+# backend/uv.lock is COMMITTED, never ignored — APP-DESIGN.md §3.4: it pins CI and the
+# playground only, and never travels downstream to a consuming host. Same for
+# playground/backend/uv.lock once the playground exists (Phase 7).
+
+# playground/ — Phase 7, docs/APP-DESIGN.md §11.2. Runtime state and generated output only;
+# playground/package-lock.json and playground/backend/uv.lock ARE committed, same reasoning as
+# backend/uv.lock above.
+.next/
+next-env.d.ts
+*.tsbuildinfo
+playground/backend/media/
+playground/backend/staticfiles/
+
+# graphify — regenerable output and hardcodes this machine's local paths
+# (see CLAUDE.md's graphify section for how to rebuild it). Not committed.
+graphify-out/
+.claude/
