@@ -5,4 +5,8 @@ This app has no user-facing surface (``docs/CONTRACT.md`` §0) — every endpoin
 convention gets zero routes, not an ``ImportError``.
 """
 
-urlpatterns: list = []
+from __future__ import annotations
+
+from django.urls import URLPattern
+
+urlpatterns: list[URLPattern] = []
