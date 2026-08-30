@@ -146,12 +146,20 @@ about, following `APP-DESIGN.md` §6's own `sender=Notification` example) so a h
 
 ```python
 from dataclasses import dataclass
+from datetime import datetime
 from django.contrib.auth.base_user import AbstractBaseUser
 
 
 @dataclass(frozen=True)
+class OrphanFileInfo:
+    path: str
+    size: int
+    modified_at: datetime
+
+
+@dataclass(frozen=True)
 class OrphanScanResult:
-    files: list[str]
+    files: list[OrphanFileInfo]
     total_size: int
     files_scanned: int
     truncated: bool
@@ -220,6 +228,12 @@ class CleanupService:
 **`OrphanScanResult` carries `files_scanned` and `truncated` beyond the build guide's stated
 `files, total_size`** — see §9.5; without them, hitting `MAX_FILES_PER_RUN` is invisible to both
 the API response and the admin page.
+
+**`OrphanScanResult.files` is `list[OrphanFileInfo]`, not `list[str]`** — see §9.7; `scan()`
+already stats every candidate to apply the grace-period rail and compute `total_size`, so a bare
+path would discard data this module has already paid to fetch and force §4's `GET /orphans/`
+(`{file_path, file_size, modified_at}`) to re-stat every file on every page instead of reading it
+from the cached snapshot.
 
 **Requires another app package: No.**
 
@@ -501,6 +515,18 @@ Everything not listed here is unchanged from
    the API response (`GET /orphans/`) and the admin page — a host would have no way to know the
    orphan list it's looking at is incomplete.
 
+7. **`OrphanScanResult.files` is `list[OrphanFileInfo]` (a new frozen dataclass: `path`, `size`,
+   `modified_at`), not the guide's/§3's originally literal `list[str]`.** Decided in Phase 3:
+   `scan()` must already call `storage.get_modified_time()` on every candidate to apply the
+   grace-period rail, and `storage.size()` to compute `total_size` — a bare path throws that data
+   away and forces `GET /orphans/` (§4's `{file_path, file_size, modified_at}` response shape)
+   and `CleanupService.run()`'s byte accounting to re-stat every file again, once per page and
+   once per delete, for data the scan already had in hand. Named `OrphanFileInfo`, not
+   `OrphanFile`, specifically to avoid colliding with §6's unmanaged admin model of that name.
+   This is a `list[str]` → `list[OrphanFileInfo]` element-type change on a frozen dataclass field
+   — a **MAJOR** bump per §10, same as any other `OrphanScanResult`/`OrphanScanner.scan()`
+   signature change, legitimate to make now at 0.1.0 before the contract's first tagged release.
+
 ---
 
 ## §10. Semver triggers (concrete, against the names frozen above)
@@ -534,8 +560,10 @@ Per `CLAUDE.md`'s list, made specific to this contract — each of these is a **
   `FIELDS` already populated by someone else" — likely inspecting
   `django_cleanup.cache.FIELDS` truthiness before this app's own `prepare()` call, but the exact
   mechanism is Phase 1's to implement and test.
-- **Phase 3 decides where the `AUTO`-trigger receiver lives** (`services.py` vs. a dedicated
-  `receivers.py`) — §9.4 fixes its behavior, not its file location, per the build guide's own
-  "your call, document which."
+- **Resolved in Phase 3: the `AUTO`-trigger receiver lives in a dedicated `cleanup_app/receivers.py`**,
+  not `services.py` — keeps `services.py` as purely the rail-governed delete surface, and a
+  separate file makes "this is a log, not a gate" (§9.4) impossible to misread as one of the four
+  delete rails. Connected from `CleanupAppConfig.ready()` independently of `AUTO_CONNECT`, gated
+  only on `TRACK_AUTO_DELETIONS`.
 - **Phase 9's security-checklist walk** should explicitly re-verify §9.2's `ImproperlyConfigured`
   guard actually fires in a deliberately-misordered `INSTALLED_APPS` test, not just at review time.

@@ -83,6 +83,11 @@ test = [
     # .python-version pins 3.14 — same floor appkit's own pyproject.toml verified live against
     # Python 3.14 via its resolution-matrix CI job (APP-DESIGN.md §7.5: tests run on Postgres).
     "psycopg[binary]>=3.2.10",
+    # Contributor-only, never installed by a host and never an extra: Django's ImageField.check()
+    # system check fails without Pillow installed, and Phase 3's tests/backend/testapp.Avatar
+    # model needs a real ImageField to prove OrphanScanner's isinstance(field, models.FileField)
+    # walk actually covers ImageField end-to-end, not just structurally.
+    "pillow>=11.0",
 ]
 
 [tool.uv]
@@ -194,6 +199,20 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 module = "cleanup_app.factories"
 disallow_untyped_calls = false
+
+# celery ships no py.typed marker and no bundled stubs on PyPI — a real gap in an optional
+# dependency (the celery extra), not something a local ignore comment should paper over.
+[[tool.mypy.overrides]]
+module = "celery.*"
+ignore_missing_imports = true
+
+# tasks.py's @shared_task is celery's own untyped decorator (see the override above) — applying
+# it to a fully-typed function is exactly what disallow_untyped_decorators exists to flag, but
+# there is no fix available here short of celery shipping stubs. Scoped to this one module, which
+# exists only to define that one task (docs/CONTRACT.md §8) — strict stays on everywhere else.
+[[tool.mypy.overrides]]
+module = "cleanup_app.tasks"
+disallow_untyped_decorators = false
 
 [tool.django-stubs]
 # tests/backend/settings.py doesn't exist until Phase 2 — mypy is not a Phase 1 verification

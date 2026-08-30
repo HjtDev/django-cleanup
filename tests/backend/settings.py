@@ -22,6 +22,11 @@ Modeled on ``../appkit/tests/backend/settings.py``, with points specific to this
 * No ``CLEANUP`` dict at all — every key in it is optional with a documented default
   (``cleanup_app/conf.py``), and omitting it entirely is what proves that. Individual tests use
   ``override_settings`` where a non-default value matters.
+* ``tests.backend.testapp`` (Phase 3) ships real ``FileField``/``ImageField`` models — neither
+  ``cleanup_app`` nor ``appkit`` has any of its own (``docs/CONTRACT.md`` §1) — so
+  ``OrphanScanner.build_reference_set()``, the reverse-relation case, ``IGNORED_MODELS``, and
+  upstream ``django_cleanup``'s own auto-hook all have something real to exercise. It ships no
+  ``migrations`` package; Django's test-database creation runs ``migrate --run-syncdb`` for it.
 """
 
 from __future__ import annotations
@@ -44,6 +49,7 @@ INSTALLED_APPS = [
     "appkit",
     "cleanup_app",
     "django_cleanup",
+    "tests.backend.testapp",
 ]
 
 MIDDLEWARE = [
@@ -76,6 +82,25 @@ ROOT_URLCONF = "tests.backend.urls"
 STATIC_URL = "/static/"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# Bare defaults only — Phase 3's tests never rely on these directly, since MEDIA_ROOT changes
+# alone aren't picked up by an already-instantiated default_storage (no test-signal handler
+# resets it the way STORAGES/STATIC_ROOT/STATIC_URL changes do, verified against
+# django/test/signals.py's storages_changed receiver). Tests instead override STORAGES wholesale
+# via override_settings — that IS covered by storages_changed, so a fresh, correctly-located
+# storage is guaranteed per test. The "secondary" alias below exists so CLEANUP["STORAGE_ALIAS"]
+# has something non-default to resolve to at all.
+MEDIA_ROOT = "/tmp/cleanup-app-tests-media"
+MEDIA_URL = "/media/"
+
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+    "secondary": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+        "OPTIONS": {"location": "/tmp/cleanup-app-tests-media-secondary"},
+    },
+}
 
 # Every value below is overridable by an env var — the literal defaults are what a bare
 # `uv run pytest` needs against a Postgres already listening on localhost:5432 with the
