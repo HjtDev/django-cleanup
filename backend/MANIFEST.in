@@ -1,0 +1,12 @@
+# Ships templates/, static/, and locale/ in the SDIST — not .py files, so no build backend
+# includes them by default (APP-DESIGN.md §2). Paired with include-package-data = true and
+# [tool.setuptools.package-data] in pyproject.toml, which is what actually lands them in the
+# WHEEL — this file alone is not enough, see that table's comment.
+#
+# templates/ matters more than usual for this app: Phase 5's Jazzmin orphan-review page lives
+# there (docs/CONTRACT.md §6), so a MANIFEST.in gap here would silently ship an app whose admin
+# page 404s on a fresh install.
+recursive-include src/cleanup_app/templates *
+recursive-include src/cleanup_app/static *
+recursive-include src/cleanup_app/locale *.po *.mo
+include src/cleanup_app/py.typed
