@@ -82,7 +82,9 @@ file's summary reflects. This file is the fast reference; the guide is the map.
 
 ## Commands
 
-Tests run on Postgres, not SQLite (`docs/APP-DESIGN.md` §7.5).
+Tests run on Postgres, not SQLite (`docs/APP-DESIGN.md` §7.5). `make check` (repo root) is the
+local equivalent of the raw commands below — it brings up `docker-compose.test.yml`'s ephemeral
+Postgres itself, so a fresh clone needs nothing pre-installed beyond Docker and `uv`.
 
 ```bash
 cd backend && uv sync                              # core only

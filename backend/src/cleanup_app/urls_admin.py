@@ -7,4 +7,8 @@ Phase 4 adds ``docs/CONTRACT.md`` §4's six routes here — ``GET /orphans/``,
 (user-facing) ships intentionally empty since this app has no user-facing surface at all.
 """
 
-urlpatterns: list = []
+from __future__ import annotations
+
+from django.urls import URLPattern
+
+urlpatterns: list[URLPattern] = []

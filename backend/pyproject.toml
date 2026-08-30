@@ -180,6 +180,21 @@ mypy_path = "..:src"
 module = "*.migrations.*"
 ignore_errors = true
 
+# django-cleanup (the upstream dependency this app hooks in apps.py) ships no py.typed marker
+# and no stub package on PyPI — a real gap in a real dependency, not something a local ignore
+# comment should paper over per-callsite.
+[[tool.mypy.overrides]]
+module = "django_cleanup.*"
+ignore_missing_imports = true
+
+# factory-boy ships py.typed but factory.declarations.Sequence/SubFactory (and most other
+# declaration classes) have unannotated __init__ signatures — strict's disallow_untyped_calls
+# then flags every ordinary factories.py usage of them. Scoped to this one module, which exists
+# only to call into that API (APP-DESIGN.md §7.3) — strict stays on everywhere else.
+[[tool.mypy.overrides]]
+module = "cleanup_app.factories"
+disallow_untyped_calls = false
+
 [tool.django-stubs]
 # tests/backend/settings.py doesn't exist until Phase 2 — mypy is not a Phase 1 verification
 # gate for exactly that reason (this app's own CLAUDE-CODE-GUIDE-APP-MEDIA-CLEANUP.md §2 lists
