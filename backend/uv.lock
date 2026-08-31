@@ -544,7 +544,7 @@ dev = [
 ]
 test = [
     { name = "factory-boy", specifier = ">=3.3" },
-    { name = "pillow", specifier = ">=11.0" },
+    { name = "pillow", specifier = ">=11.3" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2.10" },
     { name = "pytest", specifier = ">=8.3" },
     { name = "pytest-cov", specifier = ">=6.0" },

@@ -88,7 +88,12 @@ test = [
     # system check fails without Pillow installed, and Phase 3's tests/backend/testapp.Avatar
     # model needs a real ImageField to prove OrphanScanner's isinstance(field, models.FileField)
     # walk actually covers ImageField end-to-end, not just structurally.
-    "pillow>=11.0",
+    # >=11.3, not just >=11.0: pillow only started shipping cp314 wheels at 11.3.0 — same floor
+    # appkit's own pyproject.toml uses (docs/CONTRACT.md), and the same failure mode as
+    # psycopg-binary above. Found live: CI's resolution-matrix (lowest-direct) job resolved
+    # pillow down to 11.0.0, which has no cp314 wheel and fails a source build on the runner
+    # (missing jpeg headers) rather than erroring cleanly.
+    "pillow>=11.3",
 ]
 
 [tool.uv]
