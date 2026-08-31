@@ -84,6 +84,27 @@ paths:
         description: Number of results to return per page.
         schema:
           type: integer
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - failed
+          - partial
+          - pending
+          - running
+          - success
+        description: Filter by run status.
+      - in: query
+        name: trigger
+        schema:
+          type: string
+          enum:
+          - api
+          - auto
+          - manual
+          - scheduled
+        description: Filter by run trigger.
       tags:
       - cleanup-admin
       security:
