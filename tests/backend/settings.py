@@ -129,16 +129,26 @@ REST_FRAMEWORK = {
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "EXCEPTION_HANDLER": "appkit.exceptions.standard_exception_handler",
     "DEFAULT_PAGINATION_CLASS": "appkit.pagination.DefaultPagination",
+    # Phase 4: actually engages ScopedRateThrottle for the six scopes below — without this, a
+    # throttle_scope declared on a view is inert (appkit's README documents this as the host's
+    # responsibility; test settings need it too so throttling genuinely engages in tests).
+    "DEFAULT_THROTTLE_CLASSES": ["rest_framework.throttling.ScopedRateThrottle"],
     # docs/CONTRACT.md §9.3: the six scope names are literals, not throttle_scope() calls — one
     # of the guide's argument-side names would contain an underscore, which that helper rejects.
     "DEFAULT_THROTTLE_RATES": {
         "cleanup_orphans_list": "60/min",
         "cleanup_orphans_delete": "20/min",
         "cleanup_runs_list": "60/min",
-        "cleanup_runs_create": "20/min",
-        "cleanup_runs_detail": "60/min",
+        "cleanup_runs_trigger": "20/min",
+        "cleanup_runs_retrieve": "60/min",
         "cleanup_summary": "60/min",
     },
+    # appkit.W006: with a rate-limiting throttle class configured (above) and NUM_PROXIES unset,
+    # SimpleRateThrottle.get_ident() joins X-Forwarded-For's full chain into the cache key, so a
+    # spoofed header could mint a fresh bucket per request. Must match APPKIT["TRUSTED_PROXY_
+    # COUNT"] (no APPKIT dict here, so appkit's own default of 1 applies) — W006 warns on any
+    # disagreement between the two, not just "unset".
+    "NUM_PROXIES": 1,
 }
 
 # COMPONENT_SPLIT_REQUEST is required, not optional (APP-DESIGN.md §12, "Generated types").

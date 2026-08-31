@@ -67,3 +67,25 @@ def test_run_scheduled_cleanup_proceeds_when_a_non_scheduled_run_is_in_flight(
     result = run_scheduled_cleanup()
 
     assert result is not None
+
+
+@pytest.mark.requires_extra
+@pytest.mark.django_db
+def test_run_cleanup_run_drives_an_existing_pending_run(media_storage: Storage) -> None:
+    """The enqueue target for ``docs/CONTRACT.md`` §4's ``POST /runs/`` when
+    ``CLEANUP["USE_CELERY"]`` is on — loads the row admin_views.py already created and drives it
+    via ``CleanupService.execute_run()``, never creating a second row."""
+    from cleanup_app.tasks import run_cleanup_run
+
+    run = CleanupRunFactory(status=CleanupRun.Status.PENDING, trigger=CleanupRun.Trigger.API)
+
+    result = run_cleanup_run(run.pk)
+
+    assert result == run.pk
+    run.refresh_from_db()
+    assert run.status in (
+        CleanupRun.Status.SUCCESS,
+        CleanupRun.Status.PARTIAL,
+        CleanupRun.Status.FAILED,
+    )
+    assert CleanupRun.objects.count() == 1

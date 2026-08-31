@@ -1,9 +1,12 @@
 """Celery task(s), behind the ``celery`` extra only.
 
-Phase 3 implements ``cleanup_app.tasks.run_scheduled_cleanup``, calling
+``cleanup_app.tasks.run_scheduled_cleanup`` (Phase 3) calls
 ``services.CleanupService.run(trigger=CleanupRun.Trigger.SCHEDULED)`` with the concurrency guard
 ``docs/CONTRACT.md`` §8 specifies (skip if a ``CleanupRun`` with ``status in (PENDING, RUNNING)``
-and ``trigger=SCHEDULED`` already exists).
+and ``trigger=SCHEDULED`` already exists). ``cleanup_app.tasks.run_cleanup_run`` (Phase 4) is the
+enqueue target for ``admin_views.CleanupRunListCreateView``'s ``POST /runs/`` when
+``CLEANUP["USE_CELERY"]`` is on — it drives an already-created row via
+``CleanupService.execute_run()`` rather than creating a new one.
 
 This module must not hard-import ``celery`` at module scope — a host without the ``celery``
 extra installed must be able to import every other part of this package without error. This app
@@ -55,4 +58,19 @@ def run_scheduled_cleanup() -> int | None:
         return None
 
     run = CleanupService.run(trigger=CleanupRun.Trigger.SCHEDULED)
+    return run.pk
+
+
+@shared_task(name="cleanup_app.tasks.run_cleanup_run")
+def run_cleanup_run(run_id: int) -> int:
+    """Drives an already-created ``CleanupRun`` row to completion — the enqueue target for
+    ``docs/CONTRACT.md`` §4's ``POST /runs/`` when ``CLEANUP["USE_CELERY"]`` is on and the
+    ``celery`` extra is importable. The view creates the ``PENDING`` row synchronously (so its
+    response always has a real id to return) and only the run itself is deferred to this task.
+
+    Loads the row and calls ``CleanupService.execute_run(run)`` — not ``CleanupService.run()``,
+    which would create a second, redundant row. Returns the run's id once finished.
+    """
+    run = CleanupRun.objects.get(pk=run_id)
+    CleanupService.execute_run(run)
     return run.pk

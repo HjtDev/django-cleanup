@@ -1,0 +1,496 @@
+openapi: 3.0.3
+info:
+  title: hjtdev-django-cleanup
+  version: 0.0.0
+paths:
+  /api/v1/cleanup/admin/orphans/:
+    get:
+      operationId: orphans_list
+      description: Paginated list of files found on the configured storage that no
+        installed model currently references, served from the cached OrphanScanner
+        snapshot — a cache miss triggers exactly one scan, a hit never re-scans storage.
+      summary: List orphaned files
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - cleanup-admin
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedOrphanFileList'
+          description: ''
+  /api/v1/cleanup/admin/orphans/delete/:
+    post:
+      operationId: orphans_delete_create
+      description: Deletes the given files, each of which must be present in the current
+        orphan snapshot. Rejects (400) any path not found there — never accepts an
+        arbitrary client-supplied path.
+      summary: Delete orphaned files
+      tags:
+      - cleanup-admin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrphanDeleteRequestRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/OrphanDeleteRequestRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/OrphanDeleteRequestRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      responses:
+        '202':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CleanupRun'
+          description: ''
+  /api/v1/cleanup/admin/runs/:
+    get:
+      operationId: runs_list
+      description: Paginated CleanupRun history, optionally filtered by status/trigger.
+      summary: List cleanup runs
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - cleanup-admin
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedCleanupRunList'
+          description: ''
+    post:
+      operationId: runs_create
+      description: 'If CLEANUP[''USE_CELERY''] is on and celery is importable: enqueues
+        the run and returns 202 with a PENDING CleanupRun. Otherwise runs synchronously
+        and returns 200 with the finished run.'
+      summary: Trigger a cleanup run
+      tags:
+      - cleanup-admin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CleanupTriggerRequestRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CleanupTriggerRequestRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CleanupTriggerRequestRequest'
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CleanupRun'
+          description: ''
+        '202':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CleanupRun'
+          description: ''
+  /api/v1/cleanup/admin/runs/{id}/:
+    get:
+      operationId: runs_retrieve
+      description: A single CleanupRun plus its CleanupRunFile rows.
+      summary: Retrieve a cleanup run
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - cleanup-admin
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CleanupRunDetail'
+          description: ''
+  /api/v1/cleanup/admin/summary/:
+    get:
+      operationId: summary_retrieve
+      description: Aggregate totals across every CleanupRun, cached short-lived.
+      summary: Cleanup history summary
+      tags:
+      - cleanup-admin
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CleanupSummary'
+          description: ''
+components:
+  schemas:
+    CleanupRun:
+      type: object
+      description: |-
+        Read-only — every field on ``CleanupRun`` is server-computed; nothing here is ever
+        client-writable directly (``POST /runs/`` goes through ``CleanupTriggerRequestSerializer``
+        instead).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/StatusEnum'
+          readOnly: true
+        trigger:
+          allOf:
+          - $ref: '#/components/schemas/TriggerEnum'
+          readOnly: true
+        dry_run:
+          type: boolean
+          readOnly: true
+        initiated_by:
+          type: integer
+          readOnly: true
+        started_at:
+          type: string
+          format: date-time
+          readOnly: true
+        finished_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        files_scanned:
+          type: integer
+          readOnly: true
+        files_deleted:
+          type: integer
+          readOnly: true
+        files_failed:
+          type: integer
+          readOnly: true
+        bytes_freed:
+          type: integer
+          readOnly: true
+        error:
+          type: string
+          readOnly: true
+      required:
+      - bytes_freed
+      - dry_run
+      - error
+      - files_deleted
+      - files_failed
+      - files_scanned
+      - finished_at
+      - id
+      - initiated_by
+      - started_at
+      - status
+      - trigger
+    CleanupRunDetail:
+      type: object
+      description: '``GET /runs/{id}/`` — the list serializer plus its ``CleanupRunFile``
+        rows.'
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/StatusEnum'
+          readOnly: true
+        trigger:
+          allOf:
+          - $ref: '#/components/schemas/TriggerEnum'
+          readOnly: true
+        dry_run:
+          type: boolean
+          readOnly: true
+        initiated_by:
+          type: integer
+          readOnly: true
+        started_at:
+          type: string
+          format: date-time
+          readOnly: true
+        finished_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        files_scanned:
+          type: integer
+          readOnly: true
+        files_deleted:
+          type: integer
+          readOnly: true
+        files_failed:
+          type: integer
+          readOnly: true
+        bytes_freed:
+          type: integer
+          readOnly: true
+        error:
+          type: string
+          readOnly: true
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/CleanupRunFile'
+          readOnly: true
+      required:
+      - bytes_freed
+      - dry_run
+      - error
+      - files
+      - files_deleted
+      - files_failed
+      - files_scanned
+      - finished_at
+      - id
+      - initiated_by
+      - started_at
+      - status
+      - trigger
+    CleanupRunFile:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        file_path:
+          type: string
+          readOnly: true
+        file_size:
+          type: integer
+          readOnly: true
+        deleted:
+          type: boolean
+          readOnly: true
+        quarantined:
+          type: boolean
+          readOnly: true
+        error:
+          type: string
+          readOnly: true
+      required:
+      - deleted
+      - error
+      - file_path
+      - file_size
+      - id
+      - quarantined
+    CleanupSummary:
+      type: object
+      description: |-
+        Response shape for ``GET /summary/`` — used only for ``@extend_schema``'s declared
+        response type; the view builds this dict itself rather than instantiating this serializer
+        against a model instance.
+      properties:
+        total_runs:
+          type: integer
+          readOnly: true
+        files_deleted_total:
+          type: integer
+          readOnly: true
+        bytes_freed_total:
+          type: integer
+          readOnly: true
+        last_run_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        last_run_status:
+          type: string
+          readOnly: true
+          nullable: true
+      required:
+      - bytes_freed_total
+      - files_deleted_total
+      - last_run_at
+      - last_run_status
+      - total_runs
+    CleanupTriggerRequestRequest:
+      type: object
+      description: '``POST /runs/``''s request body — the only client-writable field
+        for a triggered run.'
+      properties:
+        dry_run:
+          type: boolean
+          default: false
+    OrphanDeleteRequestRequest:
+      type: object
+      description: |-
+        Validates ``POST /orphans/delete/``'s ``{"file_paths": [...]}`` body against the
+        *current* cached ``OrphanScanner`` snapshot — the rail that keeps an arbitrary client-supplied
+        path from ever reaching ``CleanupService`` (``docs/CONTRACT.md`` §4: "never accepts an
+        arbitrary client-supplied path").
+      properties:
+        file_paths:
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 1024
+      required:
+      - file_paths
+    OrphanFile:
+      type: object
+      description: |-
+        Serializes ``services.OrphanFileInfo`` — a frozen dataclass, not a model — for
+        ``GET /orphans/``. ``docs/CONTRACT.md`` §4's frozen item shape: ``{file_path, file_size,
+        modified_at}``, no ``file_url`` (``file_path`` is already storage-relative, never absolute —
+        ``services._walk`` never yields anything else — so there is no ``MEDIA_ROOT`` leak to guard
+        against).
+      properties:
+        file_path:
+          type: string
+          readOnly: true
+        file_size:
+          type: integer
+          readOnly: true
+        modified_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - file_path
+      - file_size
+      - modified_at
+    PaginatedCleanupRunList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/CleanupRun'
+    PaginatedOrphanFileList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrphanFile'
+        total_size:
+          type: integer
+          example: 123456
+        files_scanned:
+          type: integer
+          example: 42
+        truncated:
+          type: boolean
+          example: false
+    StatusEnum:
+      enum:
+      - pending
+      - running
+      - success
+      - failed
+      - partial
+      type: string
+      description: |-
+        * `pending` - Pending
+        * `running` - Running
+        * `success` - Success
+        * `failed` - Failed
+        * `partial` - Partial
+    TriggerEnum:
+      enum:
+      - manual
+      - scheduled
+      - api
+      - auto
+      type: string
+      description: |-
+        * `manual` - Manual
+        * `scheduled` - Scheduled
+        * `api` - API
+        * `auto` - Auto
+  securitySchemes:
+    basicAuth:
+      type: http
+      scheme: basic
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: sessionid
