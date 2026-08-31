@@ -152,17 +152,11 @@ REST_FRAMEWORK: dict[str, object] = {
     # X-Forwarded-For, so there are zero trusted hops to skip — matches APPKIT["TRUSTED_PROXY_
     # COUNT"] below (appkit.W006 fires on any disagreement between the two).
     "NUM_PROXIES": 0,
-    # docs/CONTRACT.md §9.3: literal scope names, matching cleanup_app's own six throttle_scope
-    # values exactly — a host declares its own DEFAULT_THROTTLE_RATES entry per scope this app
-    # uses, same as README.md's "Settings" section documents.
-    "DEFAULT_THROTTLE_RATES": {
-        "cleanup_orphans_list": "60/min",
-        "cleanup_orphans_delete": "20/min",
-        "cleanup_runs_list": "60/min",
-        "cleanup_runs_trigger": "20/min",
-        "cleanup_runs_retrieve": "60/min",
-        "cleanup_summary": "60/min",
-    },
+    # Starts empty — cleanup_app's own six throttle_scope rates are added below, by the
+    # CLEANUP_APP WIRING block's own REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"].update({...}) call,
+    # exactly as README.md's "Settings" section documents. Kept out of this baseline dict so that
+    # block is the single place those six scopes are declared, matching a real host's own diff.
+    "DEFAULT_THROTTLE_RATES": {},
 }
 
 APPKIT = {
@@ -192,14 +186,71 @@ JAZZMIN_SETTINGS = {
 }
 
 # ============================================================================================
-# CLEANUP_APP WIRING — VERBATIM FROM README.md's "Installation — backend" / settings guidance.
-# Do not reorder, merge, or "improve" anything between these banners. See module docstring.
+# CLEANUP_APP WIRING — VERBATIM FROM README.md's "Settings — add to backend/config/settings.py"
+# fence. Byte-for-byte the same block the README ships, so pasting the README into a fresh host
+# is proven to work by this file actually booting. Do not reorder, merge, tune, or "improve"
+# anything between these banners — playground-specific overrides live in the tuning block below
+# the END banner instead. See module docstring.
 # ============================================================================================
 
 INSTALLED_APPS += ["cleanup_app"]
-# django_cleanup is deliberately NOT listed here — not "django_cleanup" and not
-# "django_cleanup.apps.CleanupConfig". This is the specific thing Phase 7's brief asks the
-# playground to prove: cleanup_app.apps.CleanupAppConfig.ready() (Phase 1) calls
+
+MIDDLEWARE += []  # none required
+
+REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"].update({
+    "cleanup_orphans_list": "60/min",
+    "cleanup_orphans_delete": "20/min",
+    "cleanup_runs_list": "60/min",
+    "cleanup_runs_trigger": "20/min",
+    "cleanup_runs_retrieve": "60/min",
+    "cleanup_summary": "60/min",
+})
+
+CLEANUP = {
+    "STORAGE_ALIAS": "default",       # which configured storage backend to scan;
+                                       # "default" resolves to django's default_storage
+    "SCAN_ROOTS": None,                # None = walk the whole storage backend; else a list
+                                        # of path prefixes to scope the walk to
+    "EXCLUDE_PATTERNS": [],            # fnmatch globs; a matching file is never a candidate
+                                        # orphan regardless of reference status
+    "GRACE_PERIOD_SECONDS": 3600,      # a file modified more recently than this is never a
+                                        # candidate — protects in-progress uploads and files
+                                        # referenced by an uncommitted transaction
+    "QUARANTINE_DIR": None,            # None = hard delete via storage.delete(); set = move
+                                        # the file there instead of deleting
+    "MAX_FILES_PER_RUN": 5000,         # caps candidates per scan()/run() call;
+                                        # OrphanScanResult.truncated reports whether the cap
+                                        # was hit
+    "SCAN_CACHE_TIMEOUT": 300,         # seconds the OrphanScanner.scan() snapshot is
+                                        # cached — what makes GET /orphans/ pagination never
+                                        # re-walk storage per page
+    "USE_CELERY": False,               # True makes POST /runs/ enqueue instead of running
+                                        # inline, if the celery extra is installed — the view
+                                        # checks for celery's presence rather than hard-importing it
+    "TRACK_AUTO_DELETIONS": True,      # connects the receiver logging what upstream
+                                        # django_cleanup deletes on save/delete into
+                                        # CleanupRun(trigger="auto") rows
+    "HISTORY_RETENTION_DAYS": 90,      # default window for CleanupService.purge_history()
+                                        # when older_than_days isn't passed
+    "AUTO_CONNECT": True,              # whether this app's own AppConfig.ready() calls
+                                        # django_cleanup.cache.prepare()/handlers.connect()
+                                        # at all
+    "SELECT_MODE": False,              # maps to upstream's CleanupSelectedConfig vs.
+                                        # CleanupConfig: False = every model with a FileField
+                                        # is auto-hooked except those explicitly marked
+                                        # cleanup_ignore; True = only models explicitly
+                                        # marked cleanup_select are hooked
+    "IGNORED_MODELS": [],              # list of "app_label.ModelName" strings — protective,
+                                        # not subtractive; see "Safety rails" below
+}
+
+# ============================================================================================
+# END CLEANUP_APP WIRING
+# ============================================================================================
+
+# django_cleanup is deliberately NOT listed in INSTALLED_APPS anywhere in this file — not
+# "django_cleanup" and not "django_cleanup.apps.CleanupConfig". This is the specific thing
+# Phase 7's brief asks the playground to prove: cleanup_app.apps.CleanupAppConfig.ready() calls
 # django_cleanup.cache.prepare()/handlers.connect() directly via plain Python import, so
 # upstream's own auto-hook works with zero INSTALLED_APPS entry of its own. Listing
 # "django_cleanup" here would trigger ITS OWN default AppConfig
@@ -207,21 +258,15 @@ INSTALLED_APPS += ["cleanup_app"]
 # would call cache.prepare() first and make this app's own AUTO_CONNECT wiring a no-op — see
 # cleanup_app/apps.py's own ImproperlyConfigured guard against exactly that ordering hazard.
 
-CLEANUP = {
+# --- playground-only tuning (NOT part of README's block — overrides some of the defaults
+# above for a livelier demo) ---
+CLEANUP.update({
     "GRACE_PERIOD_SECONDS": 300,  # short enough to demo, long enough the freshly-seeded file
     # is reliably protected across the seed->scan window
     "EXCLUDE_PATTERNS": ["*.keep"],
-    "MAX_FILES_PER_RUN": 5000,
     "SCAN_CACHE_TIMEOUT": 30,  # short — this playground deliberately re-scans often
     "USE_CELERY": config("CLEANUP_USE_CELERY", default=False, cast=bool),
-    "TRACK_AUTO_DELETIONS": True,
-    "HISTORY_RETENTION_DAYS": 90,
-    "AUTO_CONNECT": True,
-}
-
-# ============================================================================================
-# END CLEANUP_APP WIRING
-# ============================================================================================
+})
 
 from config.logging import build_logging_config  # noqa: E402
 

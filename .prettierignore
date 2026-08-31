@@ -1,0 +1,5 @@
+# frontend/README.md is a committed, generated COPY of the root README.md (docs/APP-DESIGN.md
+# §8's "README sync" requirement) — Prettier reformatting its Markdown prose (italic-marker
+# style, table-column padding) would break the byte-identical copy CI's readme-contract job
+# requires. Never hand-edit this file; regenerate via `make sync-readmes`.
+frontend/README.md

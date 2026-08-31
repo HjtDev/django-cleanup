@@ -201,11 +201,13 @@ class CleanupService:
         file_paths: list[str] | None = None,
         initiated_by: AbstractBaseUser | None = None,
     ) -> "CleanupRun":
-        """Create a CleanupRun(status=RUNNING, trigger=trigger, dry_run=dry_run,
-        initiated_by=initiated_by), send cleanup_run_started. If file_paths is given, operate only
-        on that subset of the CURRENT cached OrphanScanner snapshot (rejecting any path not
-        present in it is the caller's job — see §4's POST /orphans/delete/ — this method trusts
-        its input); otherwise run a fresh OrphanScanner.scan(). For every candidate file: create
+        """Create a CleanupRun(trigger=trigger, dry_run=dry_run, initiated_by=initiated_by) —
+        left at its default status, PENDING — and delegate to execute_run() (§9.10) for
+        everything else: setting status=RUNNING and sending cleanup_run_started, then, if
+        file_paths is given, operating only on that subset of the CURRENT cached OrphanScanner
+        snapshot (rejecting any path not present in it is the caller's job — see §4's POST
+        /orphans/delete/ — this method trusts its input); otherwise running a fresh
+        OrphanScanner.scan(). For every candidate file: create
         its CleanupRunFile row (deleted=False) FIRST, then attempt delete-or-quarantine
         (CLEANUP["QUARANTINE_DIR"] set -> move there; otherwise storage.delete()), then update that
         same row with the outcome. dry_run=True writes every row with deleted=False and performs
@@ -213,6 +215,15 @@ class CleanupService:
         completion: status=SUCCESS if zero failures, PARTIAL if some failed, FAILED if all failed
         or an unhandled exception occurred; sets finished_at and the four aggregate counts; sends
         cleanup_run_finished. Returns the finished CleanupRun.
+        """
+        ...
+
+    @staticmethod
+    def execute_run(run: "CleanupRun", *, file_paths: list[str] | None = None) -> "CleanupRun":
+        """Run an already-created CleanupRun to completion — everything run() above delegates to
+        past creating the row. Added per §9.10: exists so a caller that already holds a row (an
+        API-created PENDING run picked up by tasks.run_cleanup_run, §8) can drive it without
+        run() creating a second, redundant row.
         """
         ...
 
@@ -427,6 +438,18 @@ def run_scheduled_cleanup() -> int | None:
     an AUTO run can never carry PENDING/RUNNING status, so it can never trip this guard regardless.
     """
     ...
+
+
+@shared_task(name="cleanup_app.tasks.run_cleanup_run")
+def run_cleanup_run(run_id: int) -> int:
+    """Drives an already-created CleanupRun row to completion — the enqueue target for §4's
+    POST /runs/ when CLEANUP["USE_CELERY"] is on and celery is importable (added per §9.9: §4's
+    own prose never named which task it enqueues). Loads the row and calls
+    CleanupService.execute_run(run) (§9.8) — not CleanupService.run(), which would create a
+    second, redundant row. Returns the run's id once finished. Not itself a scheduled task —
+    a host never puts this one in a beat schedule.
+    """
+    ...
 ```
 
 Recommended schedule: daily, via `django_celery_beat` on the host side (this app never
@@ -544,6 +567,34 @@ Everything not listed here is unchanged from
    This is a `list[str]` → `list[OrphanFileInfo]` element-type change on a frozen dataclass field
    — a **MAJOR** bump per §10, same as any other `OrphanScanResult`/`OrphanScanner.scan()`
    signature change, legitimate to make now at 0.1.0 before the contract's first tagged release.
+
+8. **`CleanupService.execute_run()` is a second public entry point §3 never documented,** found
+   while writing Phase 8's README (`backend/src/cleanup_app/services.py:287`):
+   `execute_run(run: CleanupRun, *, file_paths: list[str] | None = None) -> CleanupRun`. `run()` is
+   a thin wrapper — it creates the `CleanupRun` row, then delegates every actual step (setting
+   `RUNNING`, sending `cleanup_run_started`, walking candidates, sending `cleanup_run_finished`) to
+   `execute_run()`. It exists so a caller that already holds a row — `tasks.run_cleanup_run` below,
+   the Celery-enqueue path off `POST /runs/` — can drive it to completion without creating a second,
+   redundant row. A pure addition (an existing caller of `run()` is unaffected), so a **MINOR** bump
+   documenting it is enough; §8's README now lists it in the "Services" table.
+
+9. **`cleanup_app.tasks.run_cleanup_run(run_id: int) -> int` is a second task §8 never named.**
+   `run_scheduled_cleanup` is the only task §8's code block shows; `run_cleanup_run` is the
+   `@shared_task(name="cleanup_app.tasks.run_cleanup_run")` that `POST /runs/` (§4) actually
+   `.delay()`s when `CLEANUP["USE_CELERY"]` is on and celery is importable — §4's own prose
+   ("enqueue, return `202`...") never names the task it enqueues. Both task names are part of the
+   namespaced public surface (`cleanup_app.tasks.*`, `CLAUDE.md` rule 7) and belong in this
+   contract; omitting one is a documentation gap, not a behavior change.
+
+10. **§3's `CleanupService.run()` docstring says the row is created at `status=RUNNING`; the code
+    creates it at the model's default, `PENDING`, and only `execute_run()` sets `RUNNING`.**
+    Verified against `models.py`'s `CleanupRun.status` field (`default=Status.PENDING`) and
+    `services.py:274-284` (`CleanupRun.objects.create(trigger=..., dry_run=..., initiated_by=...)`
+    — no `status=` kwarg — followed by `execute_run(run, ...)`, which is what sets `RUNNING`).
+    This is not a behavior bug: §4's own endpoint table already describes the Celery-enqueued
+    `POST /runs/` response as "a `PENDING` `CleanupRun`," which only holds if the row starts life
+    at `PENDING`, not `RUNNING`. §3's prose is the stale text here, not the code; corrected in this
+    revision.
 
 ---
 
