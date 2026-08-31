@@ -262,20 +262,16 @@ class CleanupService:
         file_paths: list[str] | None = None,
         initiated_by: AbstractBaseUser | None = None,
     ) -> CleanupRun:
-        """Create a CleanupRun(status=RUNNING, trigger=trigger, dry_run=dry_run,
-        initiated_by=initiated_by), send cleanup_run_started. If file_paths is given, operate only
-        on that subset of the CURRENT cached OrphanScanner snapshot; otherwise run a fresh
-        OrphanScanner.scan(). For every candidate file: create its CleanupRunFile row
-        (deleted=False) FIRST, then attempt delete-or-quarantine (CLEANUP["QUARANTINE_DIR"] set ->
-        move there; otherwise storage.delete()), then update that same row with the outcome.
-        dry_run=True writes every row with deleted=False and performs no storage operation at
-        all. One file's failure never aborts the remaining files. On completion: status=SUCCESS
-        if zero failures, PARTIAL if some failed, FAILED if all failed or an unhandled exception
-        occurred; sets finished_at and the four aggregate counts; sends cleanup_run_finished.
-        Returns the finished CleanupRun.
+        """Create a CleanupRun(trigger=trigger, dry_run=dry_run, initiated_by=initiated_by) —
+        left at its default status (PENDING) — and delegate to execute_run() for everything else.
+
+        This is a thin wrapper kept for every existing caller (the management command, the
+        Celery task, direct callers of CleanupService.run()); the actual work lives in
+        execute_run() so a caller that already holds a CleanupRun row (docs/CONTRACT.md §4's
+        POST /runs/, when USE_CELERY enqueues it) can run the same logic without creating a
+        second row. Returns the finished CleanupRun.
         """
         run = CleanupRun.objects.create(
-            status=CleanupRun.Status.RUNNING,
             trigger=trigger,
             dry_run=dry_run,
             # django-stubs resolves initiated_by's ForeignKey(settings.AUTH_USER_MODEL) to the
@@ -285,6 +281,32 @@ class CleanupService:
             # narrower parameter type, is what keeps the public signature swappable-user-safe.
             initiated_by=cast("Any", initiated_by),
         )
+        return CleanupService.execute_run(run, file_paths=file_paths)
+
+    @staticmethod
+    def execute_run(run: CleanupRun, *, file_paths: list[str] | None = None) -> CleanupRun:
+        """Run an already-created CleanupRun to completion — the body run() used to inline
+        before this was extracted so a caller that already holds a row (an API-created PENDING
+        run picked up by tasks.run_cleanup_run) can drive it without CleanupService.run()
+        creating a second, redundant row.
+
+        Sets status=RUNNING and saves it, sends cleanup_run_started. dry_run/trigger are read
+        off run.dry_run/run.trigger, not passed separately — the row is the single source of
+        truth for both once it exists. If file_paths is given, operate only on that subset of
+        the CURRENT cached OrphanScanner snapshot; otherwise run a fresh OrphanScanner.scan().
+        For every candidate file: create its CleanupRunFile row (deleted=False) FIRST, then
+        attempt delete-or-quarantine (CLEANUP["QUARANTINE_DIR"] set -> move there; otherwise
+        storage.delete()), then update that same row with the outcome. dry_run=True writes every
+        row with deleted=False and performs no storage operation at all. One file's failure never
+        aborts the remaining files. On completion: status=SUCCESS if zero failures, PARTIAL if
+        some failed, FAILED if all failed or an unhandled exception occurred; sets finished_at
+        and the four aggregate counts; sends cleanup_run_finished. Returns the finished
+        CleanupRun.
+        """
+        dry_run = run.dry_run
+        trigger = run.trigger
+        run.status = CleanupRun.Status.RUNNING
+        run.save(update_fields=["status"])
         cleanup_run_started.send(sender=CleanupRun, run_id=run.pk, trigger=trigger, dry_run=dry_run)
 
         try:

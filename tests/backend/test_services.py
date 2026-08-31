@@ -382,6 +382,44 @@ def test_run_does_not_invalidate_cache_on_dry_run(
     spy.assert_not_called()
 
 
+# --------------------------------------------------------------------------------- execute_run()
+
+
+def test_execute_run_drives_an_already_created_row(
+    media_storage: Storage, write_file: Callable[..., str]
+) -> None:
+    """Phase 4's ``POST /runs/`` (when ``USE_CELERY`` enqueues ``tasks.run_cleanup_run``) already
+    holds a ``CleanupRun`` row before this runs — ``execute_run()`` must drive that row to
+    completion without ``CleanupService.run()`` creating a second, redundant one."""
+    write_file(media_storage, "uploads/orphan.bin", age_seconds=10_000)
+    run = CleanupRun.objects.create(trigger=CleanupRun.Trigger.API, dry_run=False)
+    assert run.status == CleanupRun.Status.PENDING
+
+    result = CleanupService.execute_run(run)
+
+    assert result.pk == run.pk
+    assert result.status == CleanupRun.Status.SUCCESS
+    assert not media_storage.exists("uploads/orphan.bin")
+    assert CleanupRun.objects.count() == 1
+
+
+def test_run_creates_a_pending_row_before_delegating(media_storage: Storage) -> None:
+    """``run()`` is now a thin wrapper — proves the row it creates starts at the model's default
+    (``PENDING``) rather than jumping straight to ``RUNNING``, since ``execute_run()`` is what
+    performs that transition."""
+    created_statuses: list[str] = []
+    original = CleanupService.execute_run
+
+    def _spy(run: CleanupRun, *, file_paths: list[str] | None = None) -> CleanupRun:
+        created_statuses.append(run.status)
+        return original(run, file_paths=file_paths)
+
+    with patch.object(CleanupService, "execute_run", side_effect=_spy):
+        CleanupService.run(trigger=CleanupRun.Trigger.MANUAL)
+
+    assert created_statuses == [CleanupRun.Status.PENDING]
+
+
 # --------------------------------------------------------------------------------- purge_history()
 
 
