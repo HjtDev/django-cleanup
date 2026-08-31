@@ -1,0 +1,84 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+{# Namespaced admin/cleanup_app/orphanfile/... per INTEGRATION-GUIDE.md's override convention —
+   a host overrides this page by mirroring the same relative path under its own
+   backend/templates/.
+
+   Deliberately NOT extending admin/change_list.html: that template is driven by a real
+   ChangeList (cl.result_list, cl.formset, filter specs — all queryset-backed), and OrphanFile
+   has no table to back one with. See admin.py's module docstring for the full reasoning. #}
+
+{% block title %}{{ title }} | {{ site_title|default:_("Django site admin") }}{% endblock %}
+
+{% block bodyclass %}{{ block.super }} app-{{ opts.app_label }} model-{{ opts.model_name }} change-list{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+<a href="{% url 'admin:index' %}">{% translate "Home" %}</a>
+&rsaquo; {{ opts.verbose_name_plural|capfirst }}
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+
+  {% if truncated %}
+    <p class="errornote">
+      {% blocktranslate %}The scan hit its configured file limit — not every orphaned file is shown below. Narrow SCAN_ROOTS or raise MAX_FILES_PER_RUN to see the rest.{% endblocktranslate %}
+    </p>
+  {% endif %}
+
+  <p>
+    {% blocktranslate count counter=files|length %}
+      {{ counter }} orphaned file found.
+    {% plural %}
+      {{ counter }} orphaned files found.
+    {% endblocktranslate %}
+  </p>
+  <p>
+    {% blocktranslate with total=total_size|filesizeformat %}
+      Scanned {{ files_scanned }} files in total &mdash; {{ total }} reclaimable.
+    {% endblocktranslate %}
+  </p>
+
+  <form method="post" action="">
+    {% csrf_token %}
+
+    <div class="actions">
+      <button type="submit" name="action" value="rescan">{% translate "Rescan" %}</button>
+      {% if has_delete_permission and files %}
+        <button type="submit" name="action" value="delete">{% translate "Delete selected" %}</button>
+      {% endif %}
+    </div>
+
+    {% if files %}
+    <table id="result_list">
+      <thead>
+        <tr>
+          {% if has_delete_permission %}<th scope="col"></th>{% endif %}
+          <th scope="col">{% translate "File path" %}</th>
+          <th scope="col">{% translate "Size" %}</th>
+          <th scope="col">{% translate "Last modified" %}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for file in files %}
+        <tr>
+          {% if has_delete_permission %}
+            <td>
+              <input type="checkbox" name="{{ action_checkbox_name }}" value="{{ file.path }}">
+            </td>
+          {% endif %}
+          <td>{{ file.path }}</td>
+          <td>{{ file.size|filesizeformat }}</td>
+          <td>{{ file.modified_at }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+      <p class="help">{% translate "No orphaned files were found." %}</p>
+    {% endif %}
+  </form>
+</div>
+{% endblock %}

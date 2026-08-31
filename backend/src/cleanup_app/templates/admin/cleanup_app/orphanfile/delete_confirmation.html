@@ -1,0 +1,53 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+{# Namespaced admin/cleanup_app/orphanfile/... per INTEGRATION-GUIDE.md's override convention.
+
+   The mandatory confirmation step docs/CONTRACT.md §6 requires before anything is actually
+   deleted — reached only via a POST from change_list.html's "Delete selected" button, never a
+   GET. Re-posts the exact selection as hidden inputs plus confirm=yes; admin.py re-validates
+   this selection against the live scan snapshot again on that final POST, so nothing here is
+   trusted blindly just because it was shown on this page a moment ago. #}
+
+{% block title %}{{ title }} | {{ site_title|default:_("Django site admin") }}{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+<a href="{% url 'admin:index' %}">{% translate "Home" %}</a>
+&rsaquo; <a href="{% url 'admin:cleanup_app_orphanfile_changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a>
+&rsaquo; {% translate "Confirm deletion" %}
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  <p>
+    {% blocktranslate count counter=files|length %}
+      Are you sure you want to permanently delete {{ counter }} file? This cannot be undone.
+    {% plural %}
+      Are you sure you want to permanently delete {{ counter }} files? This cannot be undone.
+    {% endblocktranslate %}
+  </p>
+  <p>
+    {% blocktranslate with total=total_size|filesizeformat %}
+      This will free approximately {{ total }}.
+    {% endblocktranslate %}
+  </p>
+
+  <ul>
+    {% for file in files %}
+      <li>{{ file.path }} &mdash; {{ file.size|filesizeformat }}</li>
+    {% endfor %}
+  </ul>
+
+  <form method="post" action="{% url 'admin:cleanup_app_orphanfile_changelist' %}">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="delete">
+    <input type="hidden" name="confirm" value="yes">
+    {% for path in selected_paths %}
+      <input type="hidden" name="{{ action_checkbox_name }}" value="{{ path }}">
+    {% endfor %}
+    <input type="submit" value="{% translate 'Yes, delete these files' %}">
+    <a href="{% url 'admin:cleanup_app_orphanfile_changelist' %}" class="button cancel-link">{% translate "Cancel" %}</a>
+  </form>
+</div>
+{% endblock %}

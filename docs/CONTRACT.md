@@ -357,6 +357,24 @@ around, fall back to Option B (a view via `CleanupRunAdmin.get_urls()`, gated by
 `JAZZMIN_SETTINGS["custom_links"]` entry a host then must add. Phase 5 states explicitly which
 option it shipped.
 
+**Shipped: Option A, with one amendment.** The registration itself is exactly the sketch above —
+an unmanaged `OrphanFile`, `changelist_view` fully overridden to call `OrphanScanner.scan()`,
+`has_module_permission`/`has_view_permission`/`has_delete_permission` on `is_staff`,
+`has_add_permission` always `False` — and it earns the zero-`JAZZMIN_SETTINGS` sidebar entry this
+option exists for. **Amendment:** `changelist_view` renders this app's own template
+(`templates/admin/cleanup_app/orphanfile/change_list.html`, extending `admin/base_site.html`),
+not django admin's stock `admin/change_list.html`. That template is driven entirely by a real
+`ChangeList` object — `cl.result_list`, `cl.get_queryset()`, `cl.formset`, filter specs, all
+queryset-backed — and `OrphanFile` has no table to back one with; fabricating a fake `ChangeList`
+is exactly the "fighting the framework" case this section's own escape hatch names, for no
+visible benefit. `get_urls()` is also narrowed to expose only the changelist route — Django's
+default add/change/delete/history routes assume a real table and would hit a database error
+before their own permission check ever ran. The delete flow is a same-page POST/confirm/POST
+cycle (`action=delete` renders a confirmation step; `action=delete&confirm=yes` is the only path
+that calls `CleanupService.run(trigger=CleanupRun.Trigger.MANUAL, ...)`), re-validating every
+selected path against the live `OrphanScanner.scan()` snapshot before the call, mirroring
+`serializers.OrphanDeleteRequestSerializer`'s same rule for the API.
+
 **Requires another app package: No** (Django admin + Jazzmin, both host-provided infrastructure
 this package integrates with, not app packages it imports).
 
@@ -553,9 +571,9 @@ Per `CLAUDE.md`'s list, made specific to this contract — each of these is a **
 
 ## §11. Open items for later phases
 
-- **Phase 5 confirms which option (A or B, §6) actually shipped** once Django admin's changelist
-  internals are tested against a real unmanaged model — the fallback path is documented, not
-  assumed unnecessary.
+- **Resolved in Phase 5: Option A shipped**, with one amendment to §6's own text (below) — the
+  unmanaged-model registration and its free Jazzmin sidebar entry are exactly as §6 describes;
+  only the rendering target changed.
 - **Phase 1's `AppConfig.ready()` ordering check (§9.2)** needs a concrete way to detect "was
   `FIELDS` already populated by someone else" — likely inspecting
   `django_cleanup.cache.FIELDS` truthiness before this app's own `prepare()` call, but the exact
