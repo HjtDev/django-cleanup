@@ -3,7 +3,7 @@
 # Docker and uv. Mirrors ../appkit's Makefile. See CLAUDE.md's Commands block for the
 # equivalent raw commands.
 
-.PHONY: test test-bare lint typecheck check sync-readmes
+.PHONY: test test-bare lint typecheck check sync-readmes messages compilemessages
 
 # The authoritative gate — celery extra installed, >=85% coverage (this repo's CLAUDE.md
 # Commands table).
@@ -47,3 +47,15 @@ check: test lint typecheck test-bare
 # copy drifts from the original — run this and commit the copies whenever README.md changes.
 sync-readmes:
 	cp README.md backend/README.md
+
+# Regenerates locale/fa/LC_MESSAGES/django.po from source (admin.py, apps.py, models.py, and
+# the Phase 5 templates) — new translatable strings land as empty msgstr entries for a
+# translator to fill in; existing translations are preserved. Never run on its own before a
+# release: compilemessages below must follow, or the .po drifts from the shipped .mo.
+messages:
+	cd backend/src/cleanup_app && uv run --project ../.. django-admin makemessages -l fa --no-obsolete
+
+# Compiles locale/fa/LC_MESSAGES/django.po into the .mo the wheel-smoke-test CI job (and this
+# app's own OrphanFileAdmin page) actually reads — a .po alone is never enough to ship.
+compilemessages:
+	cd backend/src/cleanup_app && msgfmt --check locale/fa/LC_MESSAGES/django.po -o locale/fa/LC_MESSAGES/django.mo

@@ -56,10 +56,9 @@ coverage/
 # Translations
 *.mo
 *.pot
-# ...except this app's own shipped catalogue once one exists — a wheel consumer can't run
-# compilemessages, so the compiled .mo must be committed (APP-DESIGN.md §2's "package data must
-# be declared" note). Add the negation line here (see appkit's .gitignore for the exact form)
-# the day backend/src/cleanup_app/locale/ gets a real catalogue — not before.
+# ...except this app's own shipped catalogue — a wheel consumer can't run compilemessages, so
+# the compiled .mo must be committed (APP-DESIGN.md §2's "package data must be declared" note).
+!backend/src/cleanup_app/locale/**/*.mo
 
 # Django stuff:
 *.log
