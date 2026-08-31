@@ -50,6 +50,7 @@ frontend-check:
 	git diff --exit-code frontend/src/schema.d.ts
 	cd frontend && npx tsc --noEmit
 	cd frontend && npm run lint
+	cd frontend && npm run format:check
 	cd frontend && npm run test -- --run --coverage
 	cd frontend && npm run build
 	cd frontend && npm audit --audit-level=high
