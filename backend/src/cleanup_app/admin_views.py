@@ -20,7 +20,7 @@ from appkit.cache import cache_endpoint, invalidate_namespace
 from appkit.mixins import CachedListMixin
 from appkit.pagination import DefaultPagination
 from django.db.models import Count, QuerySet, Sum
-from drf_spectacular.utils import extend_schema, extend_schema_view
+from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
 from rest_framework import generics, status
 from rest_framework.exceptions import ValidationError
 from rest_framework.request import Request
@@ -185,6 +185,28 @@ class OrphanDeleteView(APIView):
     get=extend_schema(
         summary="List cleanup runs",
         description="Paginated CleanupRun history, optionally filtered by status/trigger.",
+        # get_queryset() below reads both of these (docs/CONTRACT.md §4's "optional status/trigger
+        # filters") but neither is a DRF filter_backend/pagination param drf-spectacular can infer
+        # on its own — undeclared here, they'd silently vanish from schema.yml, which is exactly
+        # what the frontend SDK's generated RunListParams was missing before this fix.
+        parameters=[
+            OpenApiParameter(
+                "status",
+                str,
+                OpenApiParameter.QUERY,
+                required=False,
+                enum=CleanupRun.Status.values,
+                description="Filter by run status.",
+            ),
+            OpenApiParameter(
+                "trigger",
+                str,
+                OpenApiParameter.QUERY,
+                required=False,
+                enum=CleanupRun.Trigger.values,
+                description="Filter by run trigger.",
+            ),
+        ],
         responses=CleanupRunSerializer,
         tags=["cleanup-admin"],
     ),
