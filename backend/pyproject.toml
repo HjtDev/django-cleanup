@@ -13,9 +13,10 @@ build-backend = "setuptools.build_meta"
 # could also claim. The IMPORTABLE module stays `cleanup_app` for the same collision reason,
 # never `django_cleanup` (upstream owns that name in the same site-packages).
 name = "hjtdev-django-cleanup"
-# 0.x = no stability guarantee while the public surface (docs/CONTRACT.md) is still being
-# written into code — same policy app package #1 (appkit) used through its own 0.x line.
-version = "0.1.0"
+# Bumped to 1.0.0 at Phase 9 — the public surface (docs/CONTRACT.md) is frozen and this is the
+# first tagged, published release. Must match frontend/package.json and CHANGELOG.md; CI's
+# version-lockstep job enforces it.
+version = "1.0.0"
 description = "Finds and removes orphaned media files a Django host's FileFields no longer reference, with a Jazzmin review page, full cleanup history, and auto-hooking via django-cleanup."
 # Points at THIS directory's own README.md, not the repo-root one one level up — setuptools
 # reads `readme` relative to pyproject.toml, and a monorepo's sdist build has no reliable access

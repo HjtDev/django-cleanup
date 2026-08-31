@@ -1,0 +1,90 @@
+# Thin caller — all real logic lives in the org-level reusable workflow (docs/APP-DESIGN.md
+# §10.1, §10.2). Never add job logic here; add an input to app-package-ci.yml instead.
+#
+# Ref pinning: @main, matching ../appkit's own caller — HjtDev/.github has no tags yet, so @v1
+# does not exist. Once a v1 tag is cut there, migrate every caller (including this one) to it —
+# from that point a bad push to the shared repo's main would otherwise break every app's CI
+# simultaneously with no staging step.
+name: CI
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+# The repo's default GITHUB_TOKEN permissions are read-only. app-package-ci.yml's publish-npm
+# job requests id-token: write (for OIDC trusted publishing) — a reusable workflow's job can
+# only downscope from what the CALLER grants, never escalate past it, so without this block the
+# workflow_call fails validation before any job runs at all (a zero-job "startup_failure").
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  ci:
+    uses: HjtDev/.github/.github/workflows/app-package-ci.yml@main
+    with:
+      package-name: cleanup_app
+      coverage-threshold: 85
+      extras: "celery"
+      postgres-db: test_cleanup
+      # tests/backend/settings.py uses Django's LocMemCache, not Redis, so a Redis service
+      # container would just be unused overhead.
+      needs-redis: false
+      # This repo is an npm workspace root (root package.json declares
+      # workspaces: ["frontend", "playground/frontend"]) — the only package-lock.json lives at
+      # the repo root, not in frontend/. Without this, `npm ci --working-directory frontend`
+      # fails outright (no lockfile there).
+      npm-workspace-root: "."
+      forbid-runtime-dependencies: true
+      # Asserted against the built wheel — a MANIFEST.in/package-data gap here would silently
+      # ship an app whose admin page 404s on a fresh install (MANIFEST.in's own comment on this
+      # exact risk).
+      wheel-must-contain: |
+        cleanup_app/py.typed
+        cleanup_app/locale/fa/LC_MESSAGES/django.mo
+        cleanup_app/templates/admin/cleanup_app/orphanfile/change_list.html
+        cleanup_app/templates/admin/cleanup_app/orphanfile/delete_confirmation.html
+      # Publishes frontend/ to the npm registry as @hjtdev/django-cleanup on a v* tag push, via
+      # OIDC trusted publishing — no NPM_TOKEN anywhere. One-time bootstrap required before this
+      # does anything for real: see CHANGELOG.md's v1.0.0 entry / the release runbook.
+      publish-npm: true
+    secrets: inherit
+
+  # PyPI publish lives HERE, in the caller, not in app-package-ci.yml — the one sanctioned
+  # exception to "never add job logic here" (CLAUDE.md; docs/APP-DESIGN.md §10.1). PyPI's own
+  # docs state plainly that a reusable workflow cannot be the workflow in a Trusted Publisher:
+  # the OIDC token's `job_workflow_ref` claim for a `workflow_call` job resolves to the CALLEE
+  # (HjtDev/.github/.github/workflows/app-package-ci.yml@…), never this file, so PyPI would
+  # reject every mint-token request with invalid-publisher if this job lived in the reusable
+  # workflow instead. npm has the opposite rule — it validates the CALLING workflow's name for
+  # workflow_call — which is why publish-npm correctly stays in app-package-ci.yml. Do not "fix"
+  # this asymmetry by moving one to match the other; both placements are already correct for
+  # their own registry.
+  #
+  # Registered on pypi.org as project hjtdev-django-cleanup, publisher repo
+  # HjtDev/django-cleanup, workflow ci.yml, environment publish-pypi — every field below must
+  # keep matching that configuration.
+  publish-pypi:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [ci]
+    runs-on: ubuntu-latest
+    environment: publish-pypi
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.14"
+      - run: uv build
+        working-directory: backend
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: backend/dist
+          # Mirrors publish-npm's "already published — skipping" branch: the release that
+          # bootstraps trusted publishing on a NEW PyPI project can still hit a re-run of this
+          # exact tag, and failing on "file already exists" instead of skipping would turn a
+          # recoverable re-run into a stuck release.
+          skip-existing: true
