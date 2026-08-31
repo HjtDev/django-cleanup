@@ -1,0 +1,37 @@
+[project]
+name = "playground"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = [
+    "hjtdev-django-cleanup[celery]",
+    "django>=5.2,<7.0",
+    "djangorestframework>=3.15,<4.0",
+    "drf-spectacular>=0.27,<1.0",
+    "django-jazzmin>=3.0",
+    "uvicorn>=0.34",
+    "psycopg[binary]>=3.2.10",
+    "django-redis>=5.4",
+    "python-decouple>=3.8",
+    "pillow>=11.0",
+]
+
+[dependency-groups]
+test = ["pytest>=8.3", "pytest-django>=4.9", "httpx>=0.27"]
+
+[tool.uv]
+default-groups = ["test"]
+
+# Path-linked, not tag-pinned — docs/APP-DESIGN.md §11.2: "Use [tool.uv.sources] for this rather
+# than an editable install flag — it redirects where a dependency resolves from without changing
+# the dependency declaration, so the same pyproject.toml line works for both dev and release."
+# This is what proves the app's OWN working tree, not a released version of it.
+[tool.uv.sources]
+hjtdev-django-cleanup = { path = "../../backend", editable = true }
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings"
+pythonpath = ["."]
+addopts = "-ra --strict-markers"
+markers = [
+    "live: hits the real docker-compose stack over HTTP, not Django's test client",
+]
