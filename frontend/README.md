@@ -18,14 +18,14 @@ reference, with a Jazzmin review page, full cleanup history, and auto-hooking vi
 Published to PyPI:
 
 ```bash
-uv add "hjtdev-django-cleanup>=0.1,<1.0"
+uv add "hjtdev-django-cleanup>=1.0,<2.0"
 ```
 
 Pinning an unreleased commit instead of a tagged release still works via the git+subdirectory
 form:
 
 ```bash
-uv add "git+https://github.com/HjtDev/django-cleanup.git@v0.1.0#subdirectory=backend"
+uv add "git+https://github.com/HjtDev/django-cleanup.git@v1.0.1#subdirectory=backend"
 ```
 
 Optional extra: `hjtdev-django-cleanup[celery]` adds `celery[redis]>=5.4,<6.0` and
@@ -42,7 +42,15 @@ that's the host's job, and skipping it fails **silently**. `appkit`'s own system
 (`appkit.E001`/`E002`) only run if `appkit` is listed in `INSTALLED_APPS` at all; omitting it
 entirely trips nothing. The only symptom is a wrong response shape: a non-staff request to any
 endpoint below still 403s, but with DRF's bare `{"detail": "..."}` instead of appkit's documented
-error envelope. Before adding the settings block further down, make sure a host already has:
+error envelope.
+
+**Already on `base-scaffold`? This whole block is already done for you.** Every line below —
+`appkit` in `INSTALLED_APPS`, `RequestIDMiddleware` positioned right after `SecurityMiddleware`,
+both `REST_FRAMEWORK` keys, the `request_id` logging filter — ships in the scaffold's own
+`backend/config/settings.py`/`logging.py` from a fresh clone. Verify it's there rather than
+re-adding it; a second copy of the middleware entry is a silent duplicate, not an error. This
+section exists for a host that isn't on `base-scaffold`, or that removed appkit's wiring. Before
+adding the settings block further down, make sure a host already has:
 
 ```python
 INSTALLED_APPS += ["appkit"]
@@ -67,26 +75,34 @@ etc.).
   `django_cleanup.cache.prepare()`/`handlers.connect()` directly via plain Python import, so
   upstream's auto-hook works with zero `INSTALLED_APPS` entry of its own. Listing `django_cleanup`
   explicitly makes *its* `ready()` populate the cache first, silently turning this app's own
-  `SELECT_MODE`/`IGNORED_MODELS` settings into a no-op — `cleanup_app` detects this ordering and
-  raises `ImproperlyConfigured` rather than failing silently, but the fix is simply: don't add it.
+  `SELECT_MODE`/`IGNORED_MODELS` settings into a no-op if either is set to something other than its
+  default — `cleanup_app` detects that specific combination (cache already populated *and*
+  `SELECT_MODE`/`IGNORED_MODELS` non-default) and raises `ImproperlyConfigured` rather than failing
+  silently. With both settings left at their defaults there's nothing for the guard to protect, so
+  it doesn't raise in that case either — the fix either way is simply: don't add `django_cleanup`.
 
 ## Settings — add to `backend/config/settings.py`
+
+If your host runs mypy in strict mode with `django-stubs` (`base-scaffold` does), both the
+`.update()` call and the bare `CLEANUP = {...}` below need the two small additions marked inline —
+without them, strict mypy reports `"object" has no attribute "update"` and `Need type annotation
+for "CLEANUP"` respectively, even though the file imports and runs correctly either way:
 
 ```python
 INSTALLED_APPS += ["cleanup_app"]
 
 MIDDLEWARE += []  # none required
 
-REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"].update({
-    "cleanup_orphans_list": "60/min",
-    "cleanup_orphans_delete": "20/min",
+REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"].update({  # type: ignore[attr-defined]  # only if your
+    "cleanup_orphans_list": "60/min",              # host's REST_FRAMEWORK dict isn't itself
+    "cleanup_orphans_delete": "20/min",             # annotated dict[str, Any] — see above
     "cleanup_runs_list": "60/min",
     "cleanup_runs_trigger": "20/min",
     "cleanup_runs_retrieve": "60/min",
     "cleanup_summary": "60/min",
 })
 
-CLEANUP = {
+CLEANUP: dict[str, Any] = {  # dict[str, Any] needed under mypy --strict; `Any` from `typing`
     "STORAGE_ALIAS": "default",       # which configured storage backend to scan;
                                        # "default" resolves to django's default_storage
     "SCAN_ROOTS": None,                # None = walk the whole storage backend; else a list
@@ -95,7 +111,10 @@ CLEANUP = {
                                         # orphan regardless of reference status
     "GRACE_PERIOD_SECONDS": 3600,      # a file modified more recently than this is never a
                                         # candidate — protects in-progress uploads and files
-                                        # referenced by an uncommitted transaction
+                                        # referenced by an uncommitted transaction. Smoke-testing
+                                        # right after creating a file? Lower this or wait — a
+                                        # too-recent file silently scores 0 candidates, not an
+                                        # error, and this default is a full hour.
     "QUARANTINE_DIR": None,            # None = hard delete via storage.delete(); set = move
                                         # the file there instead of deleting
     "MAX_FILES_PER_RUN": 5000,         # caps candidates per scan()/run() call;
@@ -150,10 +169,18 @@ frontend SDK adds on your behalf beyond its own basePath: the SDK's basePath is 
 `/api/v1/cleanup` (see "Usage — frontend" below), and its manager appends `admin/` itself when
 building every request path.
 
+Also add the one-line `banned-api` entry `INTEGRATION-GUIDE.md` §2 step 10 asks for from every
+installed app, in `backend/pyproject.toml`:
+
+```toml
+"cleanup_app".msg = "Import app packages only from core/ or config/ — INTEGRATION-GUIDE.md §4"
+```
+
 ## Migrations
 
 ```bash
-uv run python manage.py migrate cleanup_app
+docker compose exec backend python manage.py migrate cleanup_app   # containerized host
+uv run python manage.py migrate cleanup_app                        # outside Docker
 ```
 
 Two migrations: `CleanupRun`/`CleanupRunFile` (real tables), and `OrphanFile` (migration *state*
@@ -286,7 +313,7 @@ re-validated against the current scan snapshot first, same as the API's `POST /o
 
 ```bash
 npm install @hjtdev/appkit               # if not already installed
-npm install @hjtdev/django-cleanup
+npm install @hjtdev/django-cleanup@1.0.1 # pin to the same tag as the backend half
 ```
 
 ## Usage — add this app's basePath to the shared provider, then import hooks from the package root
