@@ -1,6 +1,6 @@
 {
   "name": "@hjtdev/django-cleanup",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Admin-only orphan-file review and cleanup-run SDK for hjtdev-django-cleanup — typed hooks over the /api/v1/cleanup/admin/ endpoints, generated from the backend's own OpenAPI schema.",
   "license": "MIT",
   "type": "module",

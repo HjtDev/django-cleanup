@@ -3,8 +3,8 @@
 # Docker and uv. Mirrors ../appkit's Makefile. See CLAUDE.md's Commands block for the
 # equivalent raw commands.
 
-.PHONY: test test-bare lint typecheck frontend-check check sync-readmes messages compilemessages \
-	playground-up playground-down playground-logs playground-reset
+.PHONY: test test-bare lint typecheck frontend-check check sync-readmes docs-link messages \
+	compilemessages playground-up playground-down playground-logs playground-reset
 
 # The authoritative gate — celery extra installed, >=85% coverage (this repo's CLAUDE.md
 # Commands table).
@@ -66,6 +66,34 @@ check: test lint typecheck test-bare frontend-check
 sync-readmes:
 	cp README.md backend/README.md
 	cp README.md frontend/README.md
+
+# Symlinks the five design docs shared across every project in this ecosystem — APP-DESIGN.md,
+# BASE-DESIGN.md, INTEGRATION-GUIDE.md, CLAUDE-CODE-GUIDE-APP.md, CLAUDE-CODE-GUIDE-BASE.md —
+# from a sibling checkout of HjtDev/ecosystem-docs, instead of holding a local copy of each.
+# Everything else in docs/ (CONTRACT.md, this project's own
+# CLAUDE-CODE-GUIDE-APP-MEDIA-CLEANUP.md, SECURITY-CHECKLIST.md) is untouched — those are
+# genuinely local. Idempotent; safe to re-run. See ecosystem-docs/README.md and this repo's own
+# CLAUDE.md for the "edit there, never here" convention this depends on.
+SHARED_DOCS = APP-DESIGN.md BASE-DESIGN.md INTEGRATION-GUIDE.md CLAUDE-CODE-GUIDE-APP.md \
+	CLAUDE-CODE-GUIDE-BASE.md
+
+docs-link:
+	@test -d ../ecosystem-docs || { \
+		echo "../ecosystem-docs not found — clone it as a sibling of this repo first:" >&2; \
+		echo "  cd .. && git clone https://github.com/HjtDev/ecosystem-docs.git" >&2; \
+		exit 1; \
+	}
+	@for f in $(SHARED_DOCS); do \
+		rm -f docs/$$f; \
+		ln -s ../../ecosystem-docs/$$f docs/$$f; \
+	done
+	@for f in $(SHARED_DOCS); do \
+		test -e docs/$$f || { \
+			echo "docs/$$f is a broken symlink — expected ../ecosystem-docs/$$f to exist" >&2; \
+			exit 1; \
+		}; \
+	done
+	@echo "Linked $(words $(SHARED_DOCS)) shared docs from ../ecosystem-docs/ (all resolve)"
 
 # Regenerates locale/fa/LC_MESSAGES/django.po from source (admin.py, apps.py, models.py, and
 # the Phase 5 templates) — new translatable strings land as empty msgstr entries for a

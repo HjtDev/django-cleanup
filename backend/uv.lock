@@ -472,7 +472,7 @@ wheels = [
 
 [[package]]
 name = "hjtdev-appkit"
-version = "2.0.1"
+version = "2.0.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "django" },
@@ -481,14 +481,14 @@ dependencies = [
     { name = "nh3" },
     { name = "puremagic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/30/4d/6f9cfa5aa5bee2d3a8fd57e4706061c45adc0a4dc5de0d26d749f813333e/hjtdev_appkit-2.0.1.tar.gz", hash = "sha256:0a97e79a623202116ab5a28e59c4c702e4ea988362dfd3d9f611523c74470e49", size = 94120, upload-time = "2026-08-30T08:32:39.788Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/90/77/43de8400b65f6af252a0273c5bf2967de7f833392178313f16d8734ce741/hjtdev_appkit-2.0.2.tar.gz", hash = "sha256:cf99c54e2b450e3634295152ecad11be558320b2f8896991e00d79e5eaf39e68", size = 94209, upload-time = "2026-09-02T14:05:19.644Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/50/05/143b3ddfc4575c8cac872ab76f742eb5dd4ed8289e270332b2763cbb23de/hjtdev_appkit-2.0.1-py3-none-any.whl", hash = "sha256:ee8e09866d97162e8229e08e90ad88ebcd68b7165b050de67241a0945f6379ae", size = 67761, upload-time = "2026-08-30T08:32:38.393Z" },
+    { url = "https://files.pythonhosted.org/packages/ca/95/c0783f466ea3d7549cd3ccde14cdee013520af85a105658e928b8dcaf351/hjtdev_appkit-2.0.2-py3-none-any.whl", hash = "sha256:8288331dca361eb22275ffd5bf0539cfecd44b09e06feb9f164d8e9779071ed2", size = 67766, upload-time = "2026-09-02T14:05:18.433Z" },
 ]
 
 [[package]]
 name = "hjtdev-django-cleanup"
-version = "1.0.0"
+version = "1.0.1"
 source = { editable = "." }
 dependencies = [
     { name = "django" },

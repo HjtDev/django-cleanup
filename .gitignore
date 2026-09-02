@@ -76,6 +76,14 @@ instance/
 # Sphinx documentation
 docs/_build/
 
+# Shared design docs — symlinked from a sibling ../ecosystem-docs checkout via `make docs-link`,
+# never held as a local copy. See ecosystem-docs/README.md and this repo's own CLAUDE.md.
+docs/APP-DESIGN.md
+docs/BASE-DESIGN.md
+docs/INTEGRATION-GUIDE.md
+docs/CLAUDE-CODE-GUIDE-APP.md
+docs/CLAUDE-CODE-GUIDE-BASE.md
+
 # PyBuilder
 target/
 

@@ -4,6 +4,39 @@ All notable changes to django-cleanup are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning is semantic across both
 halves under one tag (`CLAUDE.md`'s Semver triggers).
 
+## [1.0.1] — 2026-09-02
+
+Documentation-only patch — Phase 10 real-host verification (a fresh `base-scaffold` clone,
+following `README.md` alone) found the README itself out of date and, in one case, mypy-strict
+incompatible. No behavior change; nothing here needed a code change to `cleanup_app`.
+
+### Fixed
+
+- **Install range was uninstallable.** `uv add "hjtdev-django-cleanup>=0.1,<1.0"` could never
+  resolve `1.0.0` — the only version ever published. Corrected to `>=1.0,<2.0`; the git-pin
+  example's stale `@v0.1.0` corrected to `@v1.0.1`.
+- **Frontend install example left unpinned**, contradicting the guide's own "both halves at the
+  same tag" rule. Now shows `npm install @hjtdev/django-cleanup@1.0.1`.
+- **Missing `banned-api` line.** The README never mentioned the one-line `backend/pyproject.toml`
+  entry `INTEGRATION-GUIDE.md` §2 step 10 requires from every installed app. Added under "URL
+  mounting."
+- **`appkit` prerequisite block didn't say it's a no-op on `base-scaffold`.** Every line it asked
+  a host to add already ships in the scaffold's own `settings.py`/`logging.py`; the README now
+  says so, so a host doesn't duplicate wiring that's already there.
+- **`CLEANUP` settings block failed strict mypy (`django-stubs`) when pasted verbatim** —
+  `"object" has no attribute "update"` on the throttle-rate merge, `Need type annotation for
+  "CLEANUP"` on the bare dict literal. Both now carry the annotation/ignore a strict host needs,
+  with an inline note explaining why.
+- **No warning on the grace-period trap.** A file created moments before a scan is silently
+  filtered by the default 3600s `GRACE_PERIOD_SECONDS`, reporting `files_scanned: 0` with no
+  error — exactly what a first smoke-test hits. Added a callout at the setting itself.
+- **Migration command didn't show the containerized form** `INTEGRATION-GUIDE.md` §2 step 8 itself
+  uses as the primary example. Both forms now shown.
+- **`ImproperlyConfigured` ordering-guard claim didn't state its own scope.** The guard (verified
+  working correctly — `cleanup_app/apps.py`) only fires when `SELECT_MODE`/`IGNORED_MODELS` is set
+  to a non-default value; the "Compatibility" section now says so, rather than implying the
+  misordering alone is unconditionally caught.
+
 ## [1.0.0] — 2026-08-31
 
 First tagged, published release — `hjtdev-django-cleanup` on PyPI and

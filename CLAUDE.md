@@ -25,6 +25,16 @@ and hook already decided so a phase session is paste-and-go instead of a re-deri
 session. Once `docs/CONTRACT.md` exists (Phase 0), read that too — it's the frozen contract this
 file's summary reflects. This file is the fast reference; the guide is the map.
 
+**Shared docs live in `HjtDev/ecosystem-docs`, not here.** `docs/APP-DESIGN.md`,
+`docs/BASE-DESIGN.md`, `docs/INTEGRATION-GUIDE.md`, `docs/CLAUDE-CODE-GUIDE-APP.md`, and
+`docs/CLAUDE-CODE-GUIDE-BASE.md` are symlinks into a sibling `../ecosystem-docs` checkout
+(`make docs-link`) — the same five files, unchanged, shared with `appkit` and `base-scaffold`.
+**Edit them there, never here** — a local edit to the symlink target changes the file in every
+project that links it, which is the point, but only if the edit actually lands in
+`ecosystem-docs` and gets committed/pushed from that repo. `docs/CONTRACT.md`,
+`docs/CLAUDE-CODE-GUIDE-APP-MEDIA-CLEANUP.md`, and `docs/SECURITY-CHECKLIST.md` are this
+project's own and stay real files here.
+
 ## The rules that define this package
 
 1. **Two declared dependencies, and nothing else.** `appkit` (cache mixin, error envelope,
